@@ -1,0 +1,35 @@
+version: "3.9"
+
+services:
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq_yarrow
+    environment:
+      RABBITMQ_DEFAULT_USER: "username"
+      RABBITMQ_DEFAULT_PASS: "password"
+    container_name: "rabbitmq"
+
+  integration-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: pytest
+    depends_on:
+      - yarrow
+    environment:
+      RABBITMQ_VIRTUAL_HOST: abc
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: username
+      RABBITMQ_PASSWORD: password
+
+    volumes:
+      - integration_tests:/app
+
+
+volumes:
+  rabbitmq_data: {}
