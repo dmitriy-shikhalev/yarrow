@@ -13,10 +13,6 @@ ALL_QUEUE = '__all__'
 INFO_QUEUE = '__info__'
 
 
-def test():
-    raise NotImplementedError('test')
-
-
 def serve() -> None:
     """
     Main function: serve and do all business logic of package.
@@ -47,7 +43,7 @@ def serve() -> None:
 
     try:
         channel.queue_declare('test')
-        channel.basic_consume('test', test)
+        # channel.basic_consume('test', test)
 
         channel.start_consuming()
     finally:
