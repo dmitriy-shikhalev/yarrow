@@ -21,7 +21,8 @@ class Sum(Operator):
     input: Input
     output: Output
 
-    def run(self, input_: Input):
+    @classmethod
+    def run(cls, input_: Input):
         return Output(
             c=input_.a + input_.b
         )
@@ -34,7 +35,8 @@ class Mul(Operator):
     input: Input
     output: Output
 
-    def run(self, input_: Input):
+    @classmethod
+    def run(cls, input_: Input):
         return Output(
             c=input_.a * input_.b
         )

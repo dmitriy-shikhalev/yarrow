@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings  # , SettingsConfigDict
 
 
@@ -9,4 +11,5 @@ class Settings(BaseSettings):
     VIRTUAL_HOST: str
     USERNAME: str
     PASSWORD: str
-    MODULE_NAME: str
+
+    CONFIG_FILENAME: Path
