@@ -11,8 +11,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-ALL_QUEUE = '__all__'
-INFO_QUEUE = '__info__'
+# ALL_QUEUE = '__all__'
+# INFO_QUEUE = '__info__'
 
 
 OPERATORS = 'operators'
@@ -25,9 +25,11 @@ def read_operator_list() -> list[str]:
     settings = Settings()
 
     with open(settings.CONFIG_FILENAME, encoding='utf-8') as file_descriptor:
-        data = list(yaml.load_all(file_descriptor, Loader=yaml.Loader))
-        operators: list[str] = data[0][OPERATORS]
-        return operators
+        generator = yaml.load_all(file_descriptor, Loader=yaml.Loader)
+
+    data = list(generator)
+    operators: list[str] = data[0][OPERATORS]
+    return operators
 
 
 def serve() -> None:
@@ -60,11 +62,11 @@ def serve() -> None:
     channel = connection.channel()
 
     try:
-        channel.queue_declare('test')
-
         for operator_qualified_name in operators:
             operator_name = operator_qualified_name.rsplit('.', 1)[1]
             package_name = operator_qualified_name.rsplit('.', 1)[0]
+
+            channel.queue_declare(operator_name)
 
             operator_module = import_module(
                 operator_name,
