@@ -11,6 +11,9 @@ from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 
 
+DEAD_LETTERS_QUEUE = '__dead_letters_queue__'
+
+
 class Operator:
     # pylint: disable=too-few-public-methods
     """
@@ -53,24 +56,36 @@ class Operator:
         """
         Init message call.
         """
-        if properties.reply_to is None:
-            raise ValueError('No property reply_to')
-        if method_frame.delivery_tag is None:
-            raise ValueError('No delivery tag')
-        if properties.correlation_id is None:
-            raise ValueError('No correlation_id')
+        try:
+            if properties.reply_to is None:
+                raise ValueError('No property reply_to')
+            if method_frame.delivery_tag is None:
+                raise ValueError('No delivery tag')
+            if properties.correlation_id is None:
+                raise ValueError('No correlation_id')
 
-        result = self.call(**json.loads(body))
+            result = self.call(**json.loads(body))
 
-        channel.basic_publish(
-            '',
-            routing_key=properties.reply_to,
-            body=json.dumps(result).encode('utf-8'),
-            properties=pika.BasicProperties(
-                correlation_id=properties.correlation_id,
+            channel.basic_publish(
+                '',
+                routing_key=properties.reply_to,
+                body=json.dumps(result).encode('utf-8'),
+                properties=pika.BasicProperties(
+                    correlation_id=properties.correlation_id,
+                )
             )
-        )
-        channel.basic_ack(method_frame.delivery_tag)
+            channel.basic_ack(method_frame.delivery_tag)
+        except Exception as error:  # pylint: disable=broad-exception-caught
+            channel.basic_publish(
+                '',
+                routing_key=DEAD_LETTERS_QUEUE,
+                body=json.dumps({
+                    'message': json.loads(body),
+                    'error': str(error),
+                }).encode('utf-8')
+            )
+            if method_frame.delivery_tag is not None:
+                channel.basic_ack(method_frame.delivery_tag)
 
     @classmethod
     def call(cls, **kwargs: Any) -> Any:

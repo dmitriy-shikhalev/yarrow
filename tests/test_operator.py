@@ -90,8 +90,14 @@ def test_operator_init_properties_reply_to_none():
     properties = Mock(reply_to=None)
     body = b'{"a": 3}'
 
-    with pytest.raises(ValueError):
-        TestOperator(channel, method_frame, properties, body)
+    TestOperator(channel, method_frame, properties, body)
+
+    channel.basic_publish.assert_called_once_with(
+        '',
+        routing_key='__dead_letters_queue__',
+        body=b'{"message": {"a": 3}, "error": "No property reply_to"}'
+    )
+    channel.basic_ack.assert_called_once_with(method_frame.delivery_tag)
 
 
 def test_operator_init_method_frame_delivery_tag_none():
@@ -100,8 +106,13 @@ def test_operator_init_method_frame_delivery_tag_none():
     properties = Mock()
     body = b'{"a": 3}'
 
-    with pytest.raises(ValueError):
-        TestOperator(channel, method_frame, properties, body)
+    TestOperator(channel, method_frame, properties, body)
+
+    channel.basic_publish.assert_called_once_with(
+        '',
+        routing_key='__dead_letters_queue__',
+        body=b'{"message": {"a": 3}, "error": "No delivery tag"}'
+    )
 
 
 def test_operator_init_properties_correlation_id_none():
@@ -110,5 +121,11 @@ def test_operator_init_properties_correlation_id_none():
     properties = Mock(correlation_id=None)
     body = b'{"a": 3}'
 
-    with pytest.raises(ValueError):
-        TestOperator(channel, method_frame, properties, body)
+    TestOperator(channel, method_frame, properties, body)
+
+    channel.basic_publish.assert_called_once_with(
+        '',
+        routing_key='__dead_letters_queue__',
+        body=b'{"message": {"a": 3}, "error": "No correlation_id"}'
+    )
+    channel.basic_ack.assert_called_once_with(method_frame.delivery_tag)

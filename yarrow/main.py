@@ -12,10 +12,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-ALL_QUEUE = '__all__'
-INFO_QUEUE = '__info__'
-
-
 OPERATORS = 'operators'
 
 
