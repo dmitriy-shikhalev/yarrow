@@ -1,5 +1,6 @@
 from unittest.mock import Mock, patch
 
+import pika
 import pytest
 from pydantic import BaseModel
 
@@ -12,6 +13,15 @@ class TestModel(BaseModel):
 
 def f():
     ...
+
+
+class TestOperator(operator.Operator):
+    input = TestModel
+    output = TestModel
+
+    @classmethod
+    def run(cls, input_: TestModel):
+        return TestModel(a=input_.a * 100)
 
 
 def test_operator_is_abstract_no_input():
@@ -46,14 +56,59 @@ def test_operator_call_is_abstract():
 def test_operator_call_ok():
     kwargs = {'a': 3}
 
-    class TestOperator(operator.Operator):
-        input = TestModel
-        output = TestModel
-
-        @classmethod
-        def run(cls, input_: TestModel):
-            return TestModel(a=input_.a * 100)
-
     result = TestOperator.call(**kwargs)
 
     assert result == {'a': 300}
+
+
+@patch('yarrow.operator.json.dumps')
+def test_operator_init(dumps_mock):
+    channel = Mock()
+    method_frame = Mock()
+    properties = Mock()
+    body = b'{"a": 3}'
+
+    with patch.object(TestOperator, 'call', Mock()) as call_mock:
+        TestOperator(channel, method_frame, properties, body)
+
+        call_mock.assert_called_once_with(a=3)
+
+    channel.basic_publish.assert_called_once_with(
+        '',
+        routing_key=properties.reply_to,
+        body=dumps_mock.return_value.encode.return_value,
+        properties=pika.BasicProperties(
+            correlation_id=properties.correlation_id,
+        )
+    )
+    channel.basic_ack.assert_called_once_with(method_frame.delivery_tag)
+
+
+def test_operator_init_properties_reply_to_none():
+    channel = Mock()
+    method_frame = Mock()
+    properties = Mock(reply_to=None)
+    body = b'{"a": 3}'
+
+    with pytest.raises(ValueError):
+        TestOperator(channel, method_frame, properties, body)
+
+
+def test_operator_init_method_frame_delivery_tag_none():
+    channel = Mock()
+    method_frame = Mock(delivery_tag=None)
+    properties = Mock()
+    body = b'{"a": 3}'
+
+    with pytest.raises(ValueError):
+        TestOperator(channel, method_frame, properties, body)
+
+
+def test_operator_init_properties_correlation_id_none():
+    channel = Mock()
+    method_frame = Mock()
+    properties = Mock(correlation_id=None)
+    body = b'{"a": 3}'
+
+    with pytest.raises(ValueError):
+        TestOperator(channel, method_frame, properties, body)
