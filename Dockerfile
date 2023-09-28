@@ -2,8 +2,7 @@ FROM python:3.11 as yarrow
 
 WORKDIR /app
 COPY yarrow yarrow
-COPY example/config.yaml ./example/config.yaml
-COPY example/example.py ./example/example.py
+COPY example example
 COPY pyproject.toml ./
 COPY poetry.lock ./
 COPY README.md ./

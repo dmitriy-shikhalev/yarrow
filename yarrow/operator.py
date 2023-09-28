@@ -56,6 +56,7 @@ class Operator:
         """
         Init message call.
         """
+        logger.info('Start operator %s with body %s', self.__class__.__name__, body)
         try:
             if properties.reply_to is None:
                 raise ValueError('No property reply_to')
@@ -76,6 +77,7 @@ class Operator:
             )
             channel.basic_ack(method_frame.delivery_tag)
         except Exception as error:  # pylint: disable=broad-exception-caught
+            channel.queue_declare(DEAD_LETTERS_QUEUE)
             channel.basic_publish(
                 '',
                 routing_key=DEAD_LETTERS_QUEUE,

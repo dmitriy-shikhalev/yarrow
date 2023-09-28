@@ -92,6 +92,7 @@ def test_operator_init_properties_reply_to_none():
 
     TestOperator(channel, method_frame, properties, body)
 
+    channel.queue_declare.assert_called_once_with('__dead_letters_queue__')
     channel.basic_publish.assert_called_once_with(
         '',
         routing_key='__dead_letters_queue__',
@@ -108,6 +109,7 @@ def test_operator_init_method_frame_delivery_tag_none():
 
     TestOperator(channel, method_frame, properties, body)
 
+    channel.queue_declare.assert_called_once_with('__dead_letters_queue__')
     channel.basic_publish.assert_called_once_with(
         '',
         routing_key='__dead_letters_queue__',
@@ -123,6 +125,7 @@ def test_operator_init_properties_correlation_id_none():
 
     TestOperator(channel, method_frame, properties, body)
 
+    channel.queue_declare.assert_called_once_with('__dead_letters_queue__')
     channel.basic_publish.assert_called_once_with(
         '',
         routing_key='__dead_letters_queue__',
