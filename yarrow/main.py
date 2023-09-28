@@ -1,5 +1,6 @@
 import logging
 from importlib import import_module
+from typing import Callable
 
 import pika
 import yaml
@@ -11,8 +12,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-# ALL_QUEUE = '__all__'
-# INFO_QUEUE = '__info__'
+ALL_QUEUE = '__all__'
+INFO_QUEUE = '__info__'
 
 
 OPERATORS = 'operators'
@@ -26,10 +27,46 @@ def read_operator_list() -> list[str]:
 
     with open(settings.CONFIG_FILENAME, encoding='utf-8') as file_descriptor:
         generator = yaml.load_all(file_descriptor, Loader=yaml.Loader)
+        data = list(generator)
 
-    data = list(generator)
     operators: list[str] = data[0][OPERATORS]
     return operators
+
+
+def import_operators() -> list[tuple[str, Callable]]:
+    """
+    Import operators and return pairs: [(name, function), ...].
+    """
+    operators = read_operator_list()
+    operator_pairs: list[tuple[str, Callable]] = []
+
+    for operator in operators:
+        try:
+            operator_name = operator.rsplit('.', 1)[1]
+            package_name = operator.rsplit('.', 1)[0]
+
+            operator_module = import_module(
+                package_name,
+            )
+
+            function = getattr(
+                operator_module,
+                operator_name,
+            )
+
+            if not callable(function):
+                raise ValueError(f'Function {operator_name} in module {package_name} is not callable.')
+        except ModuleNotFoundError as error:
+            logger.error('Error in %s i: %s', operator, error)
+            raise
+        operator_pairs.append(
+            (
+                operator_name,
+                function,
+            )
+        )
+
+    return operator_pairs
 
 
 def serve() -> None:
@@ -46,8 +83,11 @@ def serve() -> None:
         '***',
         settings.CONFIG_FILENAME,
     )
-    operators = read_operator_list()
-    logger.info('Operators: %s', operators)
+    operator_pairs = import_operators()
+    logger.info('Operators: %s', [
+        operator_name
+        for operator_name, _ in operator_pairs
+    ])
     connection = pika.BlockingConnection(
         parameters=pika.ConnectionParameters(
             host=settings.HOST,
@@ -62,20 +102,10 @@ def serve() -> None:
     channel = connection.channel()
 
     try:
-        for operator_qualified_name in operators:
-            operator_name = operator_qualified_name.rsplit('.', 1)[1]
-            package_name = operator_qualified_name.rsplit('.', 1)[0]
-
+        for operator_name, operator_function in operator_pairs:
             channel.queue_declare(operator_name)
 
-            operator_module = import_module(
-                operator_name,
-                package_name,
-            )
-            channel.basic_consume(operator_name, getattr(
-                operator_module,
-                operator_name,
-            ))
+            channel.basic_consume(operator_name, operator_function)
 
         channel.start_consuming()
     finally:

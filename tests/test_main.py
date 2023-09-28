@@ -1,5 +1,6 @@
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
+import pytest
 import yaml
 
 from yarrow import main
@@ -36,18 +37,97 @@ def test_read_operator_list(settings_mock, open_mock, load_mock):
 
 
 @patch('yarrow.main.import_module')
-@patch('yarrow.main.pika')
 @patch('yarrow.main.read_operator_list', return_value=[
     'example.example.Sum',
     'example.example.Mul'
 ])
+def test_import_operators(read_operator_list_mock, import_module_mock):
+    main.import_operators()
+
+    read_operator_list_mock.assert_called_once_with()
+
+    import_module_mock.assert_has_calls([
+        call('example.example'),
+        call('example.example'),
+    ])
+
+
+@patch('yarrow.main.import_module', side_effect=[
+    Mock(),
+    Mock(),
+    AttributeError,
+])
+@patch('yarrow.main.read_operator_list', return_value=[
+    'example.example.Sum',
+    'example.example.Mul',
+    'example.example.NotExistedOperator',
+])
+def test_import_operators_error_not_exists(read_operator_list_mock, import_module_mock):
+    with pytest.raises(AttributeError):
+        main.import_operators()
+
+    read_operator_list_mock.assert_called_once_with()
+
+    import_module_mock.assert_has_calls([
+        call('example.example'),
+        call('example.example'),
+    ])
+
+
+@patch('yarrow.main.import_module', side_effect=[
+    Mock(),
+    Mock(),
+    ModuleNotFoundError,
+])
+@patch('yarrow.main.read_operator_list', return_value=[
+    'example.example.Sum',
+    'example.example.Mul',
+    'example.not_exist_module.NotExistedOperator',
+])
+def test_import_operators_error_module_not_exists(read_operator_list_mock, import_module_mock):
+    with pytest.raises(ModuleNotFoundError):
+        main.import_operators()
+
+    read_operator_list_mock.assert_called_once_with()
+
+    import_module_mock.assert_has_calls([
+        call('example.example'),
+        call('example.example'),
+    ])
+
+
+@patch('yarrow.main.import_module', return_value=Mock(
+    String='abc',
+))
+@patch('yarrow.main.read_operator_list', return_value=[
+    'example.example.Sum',
+    'example.example.Mul',
+    'example.example.String',
+])
+def test_import_operators_error_not_callable(read_operator_list_mock, import_module_mock):
+    with pytest.raises(ValueError):
+        main.import_operators()
+
+    read_operator_list_mock.assert_called_once_with()
+
+    assert import_module_mock.call_count == 3
+    import_module_mock.assert_has_calls([
+        call('example.example'),
+        call('example.example'),
+        call('example.example'),
+    ])
+
+
+@patch('yarrow.main.import_operators', return_value=[
+    ('Sum', Mock()),
+    ('Mul', Mock()),
+])
+@patch('yarrow.main.pika')
 @patch('yarrow.main.Settings', return_value=Mock())
-def test_serve(settings_mock, read_operator_list_mock, pika_mock, import_module_mock):
+def test_serve(settings_mock, pika_mock, import_operators_mock):
     main.serve()
 
     settings_mock.assert_called_once_with()
-
-    read_operator_list_mock.assert_called_once_with()
 
     pika_mock.PlainCredentials.assert_called_once_with(
         settings_mock.return_value.USERNAME,
@@ -68,11 +148,8 @@ def test_serve(settings_mock, read_operator_list_mock, pika_mock, import_module_
     channel.queue_declare.assert_any_call('Sum')
     channel.queue_declare.assert_any_call('Mul')
 
-    import_module_mock.assert_any_call('Sum', 'example.example')
-    import_module_mock.assert_any_call('Mul', 'example.example')
-
-    channel.basic_consume.assert_any_call('Sum', import_module_mock.return_value.Sum)
-    channel.basic_consume.assert_any_call('Mul', import_module_mock.return_value.Mul)
+    channel.basic_consume.assert_any_call('Sum', import_operators_mock.return_value[0][1])
+    channel.basic_consume.assert_any_call('Mul', import_operators_mock.return_value[1][1])
 
     channel.start_consuming.assert_called_once_with()
 

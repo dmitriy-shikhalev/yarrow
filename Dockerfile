@@ -1,11 +1,13 @@
 FROM python:3.11 as yarrow
 
 WORKDIR /app
-COPY yarrow /tmp/yarrow/yarrow
-COPY pyproject.toml /tmp/yarrow/
-COPY poetry.lock /tmp/yarrow/
-COPY README.md /tmp/yarrow/
-COPY LICENCE.md /tmp/yarrow/
-RUN pip install -e /tmp/yarrow
+COPY yarrow yarrow
+COPY example/config.yaml ./example/config.yaml
+COPY example/example.py ./example/example.py
+COPY pyproject.toml ./
+COPY poetry.lock ./
+COPY README.md ./
+COPY LICENCE.md ./
+RUN pip install -e .
 
 CMD yarrow

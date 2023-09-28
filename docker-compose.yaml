@@ -24,9 +24,9 @@ services:
       VIRTUAL_HOST: /
       USERNAME: username
       PASSWORD: password
-      MODULE_NAME: example.example
+      CONFIG_FILENAME: example/config.yaml
     volumes:
-      - ./yarrow:/tmp/yarrow/yarrow
+      - ./:/app/
     depends_on:
       - rabbitmq-yarrow
 

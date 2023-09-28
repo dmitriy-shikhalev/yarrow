@@ -22,7 +22,7 @@ class Sum(Operator):
     output: Output
 
     @classmethod
-    def run(cls, input_: Input):
+    def run(cls, input_: Input):  # pylint: disable=missing-function-docstring
         return Output(
             c=input_.a + input_.b
         )
@@ -36,7 +36,10 @@ class Mul(Operator):
     output: Output
 
     @classmethod
-    def run(cls, input_: Input):
+    def run(cls, input_: Input):  # pylint: disable=missing-function-docstring
         return Output(
             c=input_.a * input_.b
         )
+
+
+String = 'abc'  # pylint: disable=invalid-name
