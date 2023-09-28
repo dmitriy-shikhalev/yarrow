@@ -1,6 +1,8 @@
 import logging
+from importlib import import_module
 
 import pika
+import yaml
 
 from yarrow.settings import Settings
 
@@ -13,21 +15,37 @@ ALL_QUEUE = '__all__'
 INFO_QUEUE = '__info__'
 
 
+OPERATORS = 'operators'
+
+
+def read_operator_list() -> list[str]:
+    """
+    Return all registered operators.
+    """
+    settings = Settings()
+
+    with open(settings.CONFIG_FILENAME, encoding='utf-8') as file_descriptor:
+        data = list(yaml.load_all(file_descriptor, Loader=yaml.Loader))
+        operators: list[str] = data[0][OPERATORS]
+        return operators
+
+
 def serve() -> None:
     """
     Main function: serve and do all business logic of package.
     """
     settings = Settings()
-
     logger.info(
-        'Start serving: %s %s %s %s %s',
+        'Start serving: %s %s %s %s %s, config file: %s',
         settings.HOST,
         settings.PORT,
         settings.VIRTUAL_HOST,
         settings.USERNAME,
         '***',
+        settings.CONFIG_FILENAME,
     )
-
+    operators = read_operator_list()
+    logger.info('Operators: %s', operators)
     connection = pika.BlockingConnection(
         parameters=pika.ConnectionParameters(
             host=settings.HOST,
@@ -43,7 +61,19 @@ def serve() -> None:
 
     try:
         channel.queue_declare('test')
-        # channel.basic_consume('test', test)
+
+        for operator_qualified_name in operators:
+            operator_name = operator_qualified_name.rsplit('.', 1)[1]
+            package_name = operator_qualified_name.rsplit('.', 1)[0]
+
+            operator_module = import_module(
+                operator_name,
+                package_name,
+            )
+            channel.basic_consume(operator_name, getattr(
+                operator_module,
+                operator_name,
+            ))
 
         channel.start_consuming()
     finally:
