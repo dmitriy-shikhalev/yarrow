@@ -1,0 +1,1 @@
+Analog of Celery. But with separate queue for every operator and with pydantic verification of input and output.
