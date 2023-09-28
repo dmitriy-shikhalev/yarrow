@@ -1,4 +1,5 @@
 import json
+import time
 from uuid import uuid4
 
 import pika
@@ -62,7 +63,17 @@ def test_sum(channel, reply_queue):
         )
     )
 
-    method_frame, header_frame, body = channel.basic_get('reply_queue', auto_ack=True)
+    t = time.time()
+    while t - time.time() < 5:
+        method_frame, header_frame, body = channel.basic_get('reply_queue', auto_ack=True)
+
+        if body is None:
+            time.sleep(0.1)
+            continue
+        else:
+            break
+    else:
+        raise Exception('Timeout.')
 
     assert json.loads(body) == {'c': 1100}
     assert header_frame.correlation_id == correlation_id
@@ -79,6 +90,19 @@ def test_sum_error(channel, reply_queue):
         )
     )
 
-    method_frame, header_frame, body = channel.basic_get('__dead_letters_queue__', auto_ack=True)
+    t = time.time()
 
-    assert body == {'c': 1100}
+    while time.time() - t < 5:
+        method_frame, header_frame, body = channel.basic_get('__dead_letters_queue__', auto_ack=True)
+
+        if body is None:
+            time.sleep(0.1)
+            continue
+
+        break
+    else:
+        raise Exception('Timeout.')
+
+    data = json.loads(body)
+    assert data['message'] == {'a': 100}
+    assert data['error'] is not None

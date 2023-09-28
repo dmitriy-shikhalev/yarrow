@@ -36,7 +36,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: integration-tests
-    command: pytest
+    command: pytest -vvv
     depends_on:
       - yarrow
     environment:
