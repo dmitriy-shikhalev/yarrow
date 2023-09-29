@@ -23,7 +23,7 @@ class Sum(Operator):
 
     @classmethod
     def run(cls, input_: Input):  # pylint: disable=missing-function-docstring
-        return Output(
+        yield Output(
             c=input_.a + input_.b
         )
 
@@ -37,9 +37,22 @@ class Mul(Operator):
 
     @classmethod
     def run(cls, input_: Input):  # pylint: disable=missing-function-docstring
-        return Output(
+        yield Output(
             c=input_.a * input_.b
         )
+
+
+class Sequence(Operator):
+    """
+    Return a sequence of numbers from "a" to "b".
+    """
+    input = Input
+    output = Output
+
+    @classmethod
+    def run(cls, input_: Input):
+        for c in range(input_.a, input_.b):
+            yield Output(c=c)
 
 
 String = 'abc'  # pylint: disable=invalid-name

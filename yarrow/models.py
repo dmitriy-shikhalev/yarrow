@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 class Status(Enum):
     DONE = 'DONE'
+    PROCESSING = 'PROCESSING'
     ERROR = 'ERROR'
 
 
@@ -14,3 +15,4 @@ class Answer(BaseModel):
     result: Any | None = None
     status: Status
     error: Any | None = None
+    num: int

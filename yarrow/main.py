@@ -105,5 +105,7 @@ def serve() -> None:
 
         channel.start_consuming()
     finally:
-        channel.close()
-        connection.close()
+        if channel.is_open:
+            channel.close()
+        if connection.is_open:
+            connection.close()

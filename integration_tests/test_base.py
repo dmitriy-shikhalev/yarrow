@@ -85,13 +85,15 @@ def test_sum(channel, reply_queue):
 
 
 def test_sum_error(channel, reply_queue):
+    correlation_id = uuid4().hex
+
     channel.basic_publish(
         '',
         'Sum',
         b'{"a": 100}',
         properties=pika.BasicProperties(
             reply_to='reply_queue',
-            correlation_id=uuid4().hex
+            correlation_id=correlation_id
         )
     )
 
@@ -113,3 +115,50 @@ def test_sum_error(channel, reply_queue):
     assert data['status'] == 'ERROR'
     assert data['request'] == {'a': 100}
     assert data['error'] is not None
+    assert header_frame.correlation_id == correlation_id
+
+
+def test_sequence(channel, reply_queue):
+    correlation_id = uuid4().hex
+
+    channel.basic_publish(
+        '',
+        'Sequence',
+        b'{"a": 100, "b": 110}',
+        properties=pika.BasicProperties(
+            reply_to='reply_queue',
+            correlation_id=correlation_id
+        )
+    )
+
+    set_ = {num for num in range(100, 110)}
+
+    t0 = time.time()
+
+    while set_ and time.time() - t0 < 10:
+        t = time.time()
+        while t - time.time() < 5:
+            method_frame, header_frame, body = channel.basic_get('reply_queue', auto_ack=True)
+
+            if body is None:
+                time.sleep(0.1)
+                continue
+            else:
+                break
+        else:
+            raise Exception('Timeout.')
+
+        data = json.loads(body)
+
+        if data['status'] == 'PROCESSING':
+            assert 'c' in data['result']
+            assert data['result']['c'] in set_
+            set_.discard(data['result']['c'])
+        elif data['status'] == 'DONE':
+            assert data['result']['c'] == 110
+        assert data['error'] is None
+        assert data['request'] == {'a': 100, 'b': 110}
+        assert header_frame.correlation_id == correlation_id
+
+    if set_:
+        raise ValueError(set_)

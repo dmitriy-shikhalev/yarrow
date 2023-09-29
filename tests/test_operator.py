@@ -21,7 +21,7 @@ class TestOperator(operator.Operator):
 
     @classmethod
     def run(cls, input_: TestModel):
-        return TestModel(a=input_.a * 100)
+        yield TestModel(a=input_.a * 100)
 
 
 def test_operator_is_abstract_no_input():
@@ -50,7 +50,8 @@ def test_operator_is_abstract_ok():
 
 def test_operator_call_is_abstract():
     with pytest.raises(ValueError):
-        operator.Operator.call()
+        for _ in operator.Operator.call():
+            pass
 
 
 def test_operator_call_ok():
@@ -58,7 +59,10 @@ def test_operator_call_ok():
 
     result = TestOperator.call(**kwargs)
 
-    assert result == {'a': 300}
+    elements = list(result)
+
+    assert len(elements) == 1
+    assert elements[0] == {'a': 300}
 
 
 @patch('yarrow.operator.json.dumps')
@@ -69,20 +73,88 @@ def test_operator_init(dumps_mock):
     body = b'{"a": 3}'
 
     with patch.object(TestOperator, 'call', Mock(
-        return_value={'a': 'b'}
+        return_value=[{'a': 'b'}]
     )) as call_mock:
         TestOperator(channel, method_frame, properties, body)
 
         call_mock.assert_called_once_with(a=3)
 
-    channel.basic_publish.assert_called_once_with(
+    assert channel.basic_publish.call_count == 2
+
+    channel.basic_publish.assert_any_call(
         '',
         routing_key=properties.reply_to,
-        body=b'{"request":{"a":3},"result":{"a":"b"},"status":"DONE","error":null}',
+        body=b'{"request":{"a":3},"result":{"a":"b"},"status":"PROCESSING","error":null,"num":0}',
         properties=pika.BasicProperties(
             correlation_id=properties.correlation_id,
         )
     )
+    channel.basic_publish.assert_any_call(
+        '',
+        routing_key=properties.reply_to,
+        body=b'{"request":{"a":3},"result":null,"status":"DONE","error":null,"num":1}',
+        properties=pika.BasicProperties(
+            correlation_id=properties.correlation_id,
+        )
+    )
+
+    channel.basic_ack.assert_called_once_with(method_frame.delivery_tag)
+
+
+@patch('yarrow.operator.json.dumps')
+def test_operator_generator(dumps_mock):
+    channel = Mock()
+    method_frame = Mock()
+    properties = Mock()
+    body = b'{"a": 3}'
+
+    def generator():
+        yield {'a': 'b'}
+        yield {'c': 'd'}
+        yield {'e': 'f'}
+
+    with patch.object(TestOperator, 'call', Mock(
+        return_value=generator()
+    )) as call_mock:
+        TestOperator(channel, method_frame, properties, body)
+
+        call_mock.assert_called_once_with(a=3)
+
+    assert channel.basic_publish.call_count == 4
+
+    channel.basic_publish.assert_any_call(
+        '',
+        routing_key=properties.reply_to,
+        body=b'{"request":{"a":3},"result":{"a":"b"},"status":"PROCESSING","error":null,"num":0}',
+        properties=pika.BasicProperties(
+            correlation_id=properties.correlation_id,
+        )
+    )
+    channel.basic_publish.assert_any_call(
+        '',
+        routing_key=properties.reply_to,
+        body=b'{"request":{"a":3},"result":{"c":"d"},"status":"PROCESSING","error":null,"num":1}',
+        properties=pika.BasicProperties(
+            correlation_id=properties.correlation_id,
+        )
+    )
+    channel.basic_publish.assert_any_call(
+        '',
+        routing_key=properties.reply_to,
+        body=b'{"request":{"a":3},"result":{"e":"f"},"status":"PROCESSING","error":null,"num":2}',
+        properties=pika.BasicProperties(
+            correlation_id=properties.correlation_id,
+        )
+    )
+    channel.basic_publish.assert_any_call(
+        '',
+        routing_key=properties.reply_to,
+        body=b'{"request":{"a":3},"result":null,"status":"DONE","error":null,"num":3}',
+        properties=pika.BasicProperties(
+            correlation_id=properties.correlation_id,
+        )
+    )
+
     channel.basic_ack.assert_called_once_with(method_frame.delivery_tag)
 
 
@@ -98,7 +170,7 @@ def test_operator_init_properties_reply_to_none():
     channel.basic_publish.assert_called_once_with(
         '',
         routing_key='__dead_letters_queue__',
-        body=b'{"request":{"a":3},"result":null,"status":"ERROR","error":"No property reply_to"}',
+        body=b'{"request":{"a":3},"result":null,"status":"ERROR","error":"No property reply_to","num":0}',
         properties=pika.BasicProperties(correlation_id=properties.correlation_id),
     )
     channel.basic_ack.assert_called_once_with(method_frame.delivery_tag)
@@ -115,7 +187,7 @@ def test_operator_init_method_frame_delivery_tag_none():
     channel.basic_publish.assert_called_once_with(
         '',
         routing_key=properties.reply_to,
-        body=b'{"request":{"a":3},"result":null,"status":"ERROR","error":"No delivery tag"}',
+        body=b'{"request":{"a":3},"result":null,"status":"ERROR","error":"No delivery tag","num":0}',
         properties=pika.BasicProperties(correlation_id=properties.correlation_id),
     )
 
@@ -131,7 +203,7 @@ def test_operator_init_properties_correlation_id_none():
     channel.basic_publish.assert_called_once_with(
         '',
         routing_key=properties.reply_to,
-        body=b'{"request":{"a":3},"result":null,"status":"ERROR","error":"No correlation_id"}',
+        body=b'{"request":{"a":3},"result":null,"status":"ERROR","error":"No correlation_id","num":0}',
         properties=pika.BasicProperties(),
     )
     channel.basic_ack.assert_called_once_with(method_frame.delivery_tag)

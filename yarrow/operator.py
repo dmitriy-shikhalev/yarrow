@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Any, Callable, Type
+from typing import Any, Callable, Type, Generator
 
 import pika
 from pika.spec import Basic
@@ -69,12 +69,52 @@ class Operator:
 
             result = self.call(**json.loads(body))
 
+            logger.info('The operator start return sequence.')
+            num = -1  # the solution of zero length generator
+            for num, data in enumerate(result):
+                answer = Answer(
+                    request=json.loads(body),
+                    result=data,
+                    status=Status.PROCESSING,
+                    num=num,
+                )
+
+                channel.basic_publish(
+                    '',
+                    routing_key=properties.reply_to,
+                    body=answer.model_dump_json().encode('utf-8'),
+                    properties=pika.BasicProperties(
+                        correlation_id=properties.correlation_id,
+                    )
+                )
+
+            logger.info('The operator end returning sequence.')
             answer = Answer(
                 request=json.loads(body),
-                result=result,
+                result=None,
                 status=Status.DONE,
+                num=num + 1,
             )
-            reply_to = properties.reply_to
+            channel.basic_publish(
+                '',
+                routing_key=properties.reply_to,
+                body=answer.model_dump_json().encode('utf-8'),
+                properties=pika.BasicProperties(
+                    correlation_id=properties.correlation_id,
+                )
+            )
+            if method_frame.delivery_tag is not None:
+                channel.basic_ack(method_frame.delivery_tag)
+            return
+            # else:
+            #     logger.info('The operator return answer.')
+            #     answer = Answer(
+            #         request=json.loads(body),
+            #         result=result,
+            #         status=Status.DONE,
+            #         num=0,
+            #     )
+            #     reply_to = properties.reply_to
         except Exception as error:  # pylint: disable=broad-exception-caught
             logger.error('Error in operator %s: %s', self.__class__.__name__, str(error))
 
@@ -88,18 +128,27 @@ class Operator:
                 request=json.loads(body),
                 error=str(error),
                 status=Status.ERROR,
+                num=0,
             )
 
-        channel.basic_publish(
-            '',
-            routing_key=reply_to,
-            body=answer.model_dump_json().encode('utf-8'),
-            properties=pika.BasicProperties(
-                correlation_id=properties.correlation_id,
+            channel.basic_publish(
+                '',
+                routing_key=reply_to,
+                body=answer.model_dump_json().encode('utf-8'),
+                properties=pika.BasicProperties(
+                    correlation_id=properties.correlation_id,
+                )
             )
-        )
-        if method_frame.delivery_tag is not None:
-            channel.basic_ack(method_frame.delivery_tag)
+            if method_frame.delivery_tag is not None:
+                channel.basic_ack(method_frame.delivery_tag)
+            logger.info(
+                'End operator %s with body %s, body %s, reply_to %s, correlation_id %s',
+                self.__class__.__name__,
+                body,
+                str(answer),
+                reply_to,
+                properties.correlation_id
+            )
 
     @classmethod
     def call(cls, **kwargs: Any) -> Any:
@@ -110,5 +159,6 @@ class Operator:
             raise ValueError(f'Can not use method .call for abstract class {cls}')
         input_ = cls.input.model_validate(kwargs)
         result = cls.run(input_)
-        output_ = cls.output.model_validate(result)
-        return output_.model_dump()
+        for element in result:
+            output_ = cls.output.model_validate(element)
+            yield output_.model_dump()

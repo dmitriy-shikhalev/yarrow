@@ -1,3 +1,4 @@
 operators:
   - example.example.Sum
   - example.example.Mul
+  - example.example.Sequence
