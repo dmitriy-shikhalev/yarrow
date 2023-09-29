@@ -7,6 +7,8 @@ from pika.spec import Basic
 from pika.channel import Channel
 from pydantic import BaseModel
 
+from yarrow.models import Answer, Status
+
 
 logger = logging.getLogger(__name__)
 
@@ -67,27 +69,37 @@ class Operator:
 
             result = self.call(**json.loads(body))
 
-            channel.basic_publish(
-                '',
-                routing_key=properties.reply_to,
-                body=json.dumps(result).encode('utf-8'),
-                properties=pika.BasicProperties(
-                    correlation_id=properties.correlation_id,
-                )
+            answer = Answer(
+                request=json.loads(body),
+                result=result,
+                status=Status.DONE,
             )
-            channel.basic_ack(method_frame.delivery_tag)
+            reply_to = properties.reply_to
         except Exception as error:  # pylint: disable=broad-exception-caught
-            channel.queue_declare(DEAD_LETTERS_QUEUE)
-            channel.basic_publish(
-                '',
-                routing_key=DEAD_LETTERS_QUEUE,
-                body=json.dumps({
-                    'message': json.loads(body),
-                    'error': str(error),
-                }).encode('utf-8')
+            logger.error('Error in operator %s: %s', self.__class__.__name__, str(error))
+
+            if properties.reply_to is None:
+                channel.queue_declare(DEAD_LETTERS_QUEUE)
+                reply_to = DEAD_LETTERS_QUEUE
+            else:
+                reply_to = properties.reply_to
+
+            answer = Answer(
+                request=json.loads(body),
+                error=str(error),
+                status=Status.ERROR,
             )
-            if method_frame.delivery_tag is not None:
-                channel.basic_ack(method_frame.delivery_tag)
+
+        channel.basic_publish(
+            '',
+            routing_key=reply_to,
+            body=answer.model_dump_json().encode('utf-8'),
+            properties=pika.BasicProperties(
+                correlation_id=properties.correlation_id,
+            )
+        )
+        if method_frame.delivery_tag is not None:
+            channel.basic_ack(method_frame.delivery_tag)
 
     @classmethod
     def call(cls, **kwargs: Any) -> Any:

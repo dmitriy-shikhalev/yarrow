@@ -75,7 +75,12 @@ def test_sum(channel, reply_queue):
     else:
         raise Exception('Timeout.')
 
-    assert json.loads(body) == {'c': 1100}
+    data = json.loads(body)
+
+    assert data['result'] == {'c': 1100}
+    assert data['error'] is None
+    assert data['request'] == {'a': 100, 'b': 1000}
+    assert data['status'] == 'DONE'
     assert header_frame.correlation_id == correlation_id
 
 
@@ -93,7 +98,7 @@ def test_sum_error(channel, reply_queue):
     t = time.time()
 
     while time.time() - t < 5:
-        method_frame, header_frame, body = channel.basic_get('__dead_letters_queue__', auto_ack=True)
+        method_frame, header_frame, body = channel.basic_get('reply_queue', auto_ack=True)
 
         if body is None:
             time.sleep(0.1)
@@ -104,5 +109,7 @@ def test_sum_error(channel, reply_queue):
         raise Exception('Timeout.')
 
     data = json.loads(body)
-    assert data['message'] == {'a': 100}
+    assert data['result'] is None
+    assert data['status'] == 'ERROR'
+    assert data['request'] == {'a': 100}
     assert data['error'] is not None

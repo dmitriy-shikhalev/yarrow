@@ -68,7 +68,9 @@ def test_operator_init(dumps_mock):
     properties = Mock()
     body = b'{"a": 3}'
 
-    with patch.object(TestOperator, 'call', Mock()) as call_mock:
+    with patch.object(TestOperator, 'call', Mock(
+        return_value={'a': 'b'}
+    )) as call_mock:
         TestOperator(channel, method_frame, properties, body)
 
         call_mock.assert_called_once_with(a=3)
@@ -76,7 +78,7 @@ def test_operator_init(dumps_mock):
     channel.basic_publish.assert_called_once_with(
         '',
         routing_key=properties.reply_to,
-        body=dumps_mock.return_value.encode.return_value,
+        body=b'{"request":{"a":3},"result":{"a":"b"},"status":"DONE","error":null}',
         properties=pika.BasicProperties(
             correlation_id=properties.correlation_id,
         )
@@ -96,7 +98,8 @@ def test_operator_init_properties_reply_to_none():
     channel.basic_publish.assert_called_once_with(
         '',
         routing_key='__dead_letters_queue__',
-        body=b'{"message": {"a": 3}, "error": "No property reply_to"}'
+        body=b'{"request":{"a":3},"result":null,"status":"ERROR","error":"No property reply_to"}',
+        properties=pika.BasicProperties(correlation_id=properties.correlation_id),
     )
     channel.basic_ack.assert_called_once_with(method_frame.delivery_tag)
 
@@ -109,11 +112,11 @@ def test_operator_init_method_frame_delivery_tag_none():
 
     TestOperator(channel, method_frame, properties, body)
 
-    channel.queue_declare.assert_called_once_with('__dead_letters_queue__')
     channel.basic_publish.assert_called_once_with(
         '',
-        routing_key='__dead_letters_queue__',
-        body=b'{"message": {"a": 3}, "error": "No delivery tag"}'
+        routing_key=properties.reply_to,
+        body=b'{"request":{"a":3},"result":null,"status":"ERROR","error":"No delivery tag"}',
+        properties=pika.BasicProperties(correlation_id=properties.correlation_id),
     )
 
 
@@ -125,10 +128,10 @@ def test_operator_init_properties_correlation_id_none():
 
     TestOperator(channel, method_frame, properties, body)
 
-    channel.queue_declare.assert_called_once_with('__dead_letters_queue__')
     channel.basic_publish.assert_called_once_with(
         '',
-        routing_key='__dead_letters_queue__',
-        body=b'{"message": {"a": 3}, "error": "No correlation_id"}'
+        routing_key=properties.reply_to,
+        body=b'{"request":{"a":3},"result":null,"status":"ERROR","error":"No correlation_id"}',
+        properties=pika.BasicProperties(),
     )
     channel.basic_ack.assert_called_once_with(method_frame.delivery_tag)
