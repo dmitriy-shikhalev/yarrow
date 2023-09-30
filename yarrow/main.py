@@ -1,10 +1,14 @@
+import json
 import logging
 from importlib import import_module
 from typing import Callable
 
-import pika
 import yaml
+from pika import BasicProperties, BlockingConnection, ConnectionParameters, PlainCredentials
+from pika.spec import Basic
+from pika.adapters.blocking_connection import BlockingChannel
 
+from yarrow.models import OperatorInfo
 from yarrow.settings import Settings
 
 
@@ -13,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 OPERATORS = 'operators'
+INFO_QUEUE = '__info__'
 
 
 def read_operator_list() -> list[str]:
@@ -65,6 +70,36 @@ def import_operators() -> list[tuple[str, Callable]]:
     return operator_pairs
 
 
+def get_info(channel: BlockingChannel, method_frame: Basic.Deliver, properties: BasicProperties, _: bytes) -> None:
+    """
+    Function return all operators, that can be launched.
+    """
+    if properties.reply_to is None:
+        logger.error('No reply_to')
+    else:
+        operator_pairs = import_operators()
+
+        operator_info_list = [
+            OperatorInfo(
+                name=name,
+                input=class_.input.model_json_schema(),  # type: ignore
+                output=class_.output.model_json_schema(),  # type: ignore
+            ) for name, class_ in operator_pairs
+        ]
+
+        channel.basic_publish(
+            exchange='',
+            routing_key=properties.reply_to,
+            properties=BasicProperties(
+                correlation_id=properties.correlation_id,
+            ),
+            body=json.dumps([info.model_dump() for info in operator_info_list]).encode('utf-8')
+        )
+
+    if method_frame.delivery_tag is not None:
+        channel.basic_ack(method_frame.delivery_tag)
+
+
 def serve() -> None:
     """
     Main function: serve and do all business logic of package.
@@ -84,12 +119,12 @@ def serve() -> None:
         operator_name
         for operator_name, _ in operator_pairs
     ])
-    connection = pika.BlockingConnection(
-        parameters=pika.ConnectionParameters(
+    connection = BlockingConnection(
+        parameters=ConnectionParameters(
             host=settings.HOST,
             port=settings.PORT,
             virtual_host=settings.VIRTUAL_HOST,
-            credentials=pika.PlainCredentials(
+            credentials=PlainCredentials(
                 settings.USERNAME,
                 settings.PASSWORD,
             )
@@ -98,6 +133,9 @@ def serve() -> None:
     channel = connection.channel()
 
     try:
+        channel.queue_declare(INFO_QUEUE)
+        channel.basic_consume(INFO_QUEUE, get_info)
+
         for operator_name, operator_function in operator_pairs:
             channel.queue_declare(operator_name)
 

@@ -4,6 +4,9 @@ from typing import Any
 from pydantic import BaseModel
 
 
+# pylint: disable=missing-class-docstring
+
+
 class Status(Enum):
     DONE = 'DONE'
     PROCESSING = 'PROCESSING'
@@ -16,3 +19,9 @@ class Answer(BaseModel):
     status: Status
     error: Any | None = None
     num: int
+
+
+class OperatorInfo(BaseModel):
+    name: str
+    input: dict
+    output: dict

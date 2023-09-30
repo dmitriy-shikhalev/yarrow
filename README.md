@@ -49,3 +49,9 @@ result.
 # All operator.run function should be a generator, e.g. you need to use yield, not return.
 Client will get 2 message: one with result and status "PROCESSING", and second with null
 result and status "DONE".
+
+# Launch integration tests
+- `docker-compose up --build integration-tests`
+
+# Get list of all operators and its input/output
+- Send message to queue `__info__`

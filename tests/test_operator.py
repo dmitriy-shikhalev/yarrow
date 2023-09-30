@@ -2,62 +2,47 @@ from unittest.mock import Mock, patch
 
 import pika
 import pytest
-from pydantic import BaseModel
 
-from yarrow import operator
-
-
-class TestModel(BaseModel):
-    a: int
-
-
-def f():
-    ...
-
-
-class TestOperator(operator.Operator):
-    input = TestModel
-    output = TestModel
-
-    @classmethod
-    def run(cls, input_: TestModel):
-        yield TestModel(a=input_.a * 100)
+from yarrow.operator import Operator
 
 
 def test_operator_is_abstract_no_input():
-    class_ = type('class_', (operator.Operator,), {})
+    class_ = type('class_', (Operator,), {})
 
     assert class_.is_abstract is True
 
 
-def test_operator_is_abstract_no_output():
-    class_ = type('class_', (operator.Operator,), {'input': TestModel})
+def test_operator_is_abstract_no_output(model):
+    class_ = type('class_', (Operator,), {'input': model})
 
     assert class_.is_abstract is True
 
 
-def test_operator_is_abstract_no_run():
-    class_ = type('class_', (operator.Operator,), {'input': TestModel, 'output': TestModel})
+def test_operator_is_abstract_no_run(model):
+    class_ = type('class_', (Operator,), {'input': model, 'output': model})
 
     assert class_.is_abstract is True
 
 
-def test_operator_is_abstract_ok():
-    class_ = type('class_', (operator.Operator,), {'input': TestModel, 'output': TestModel, 'run': f})
+def test_operator_is_abstract_ok(model):
+    def f():
+        ...
+
+    class_ = type('class_', (Operator,), {'input': model, 'output': model, 'run': f})
 
     assert class_.is_abstract is False
 
 
 def test_operator_call_is_abstract():
     with pytest.raises(ValueError):
-        for _ in operator.Operator.call():
+        for _ in Operator.call():
             pass
 
 
-def test_operator_call_ok():
+def test_operator_call_ok(operator):
     kwargs = {'a': 3}
 
-    result = TestOperator.call(**kwargs)
+    result = operator.call(**kwargs)
 
     elements = list(result)
 
@@ -65,17 +50,16 @@ def test_operator_call_ok():
     assert elements[0] == {'a': 300}
 
 
-@patch('yarrow.operator.json.dumps')
-def test_operator_init(dumps_mock):
+def test_operator_init(operator):
     channel = Mock()
     method_frame = Mock()
     properties = Mock()
     body = b'{"a": 3}'
 
-    with patch.object(TestOperator, 'call', Mock(
+    with patch.object(operator, 'call', Mock(
         return_value=[{'a': 'b'}]
     )) as call_mock:
-        TestOperator(channel, method_frame, properties, body)
+        operator(channel, method_frame, properties, body)
 
         call_mock.assert_called_once_with(a=3)
 
@@ -101,8 +85,7 @@ def test_operator_init(dumps_mock):
     channel.basic_ack.assert_called_once_with(method_frame.delivery_tag)
 
 
-@patch('yarrow.operator.json.dumps')
-def test_operator_generator(dumps_mock):
+def test_operator_generator(operator):
     channel = Mock()
     method_frame = Mock()
     properties = Mock()
@@ -113,10 +96,10 @@ def test_operator_generator(dumps_mock):
         yield {'c': 'd'}
         yield {'e': 'f'}
 
-    with patch.object(TestOperator, 'call', Mock(
+    with patch.object(operator, 'call', Mock(
         return_value=generator()
     )) as call_mock:
-        TestOperator(channel, method_frame, properties, body)
+        operator(channel, method_frame, properties, body)
 
         call_mock.assert_called_once_with(a=3)
 
@@ -158,13 +141,13 @@ def test_operator_generator(dumps_mock):
     channel.basic_ack.assert_called_once_with(method_frame.delivery_tag)
 
 
-def test_operator_init_properties_reply_to_none():
+def test_operator_init_properties_reply_to_none(operator):
     channel = Mock()
     method_frame = Mock()
     properties = Mock(reply_to=None)
     body = b'{"a": 3}'
 
-    TestOperator(channel, method_frame, properties, body)
+    operator(channel, method_frame, properties, body)
 
     channel.queue_declare.assert_called_once_with('__dead_letters_queue__')
     channel.basic_publish.assert_called_once_with(
@@ -176,13 +159,13 @@ def test_operator_init_properties_reply_to_none():
     channel.basic_ack.assert_called_once_with(method_frame.delivery_tag)
 
 
-def test_operator_init_method_frame_delivery_tag_none():
+def test_operator_init_method_frame_delivery_tag_none(operator):
     channel = Mock()
     method_frame = Mock(delivery_tag=None)
     properties = Mock()
     body = b'{"a": 3}'
 
-    TestOperator(channel, method_frame, properties, body)
+    operator(channel, method_frame, properties, body)
 
     channel.basic_publish.assert_called_once_with(
         '',
@@ -192,13 +175,13 @@ def test_operator_init_method_frame_delivery_tag_none():
     )
 
 
-def test_operator_init_properties_correlation_id_none():
+def test_operator_init_properties_correlation_id_none(operator):
     channel = Mock()
     method_frame = Mock()
     properties = Mock(correlation_id=None)
     body = b'{"a": 3}'
 
-    TestOperator(channel, method_frame, properties, body)
+    operator(channel, method_frame, properties, body)
 
     channel.basic_publish.assert_called_once_with(
         '',

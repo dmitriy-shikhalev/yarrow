@@ -1,8 +1,8 @@
 import json
 import logging
-from typing import Any, Callable, Type, Generator
+from typing import Any, Callable, Type
 
-import pika
+from pika import BasicProperties
 from pika.spec import Basic
 from pika.channel import Channel
 from pydantic import BaseModel
@@ -54,7 +54,7 @@ class Operator:
 
         cls.is_abstract = False  # type: ignore
 
-    def __init__(self, channel: Channel, method_frame: Basic.GetOk, properties: pika.BasicProperties, body: bytes):
+    def __init__(self, channel: Channel, method_frame: Basic.GetOk, properties: BasicProperties, body: bytes):
         """
         Init message call.
         """
@@ -83,7 +83,7 @@ class Operator:
                     '',
                     routing_key=properties.reply_to,
                     body=answer.model_dump_json().encode('utf-8'),
-                    properties=pika.BasicProperties(
+                    properties=BasicProperties(
                         correlation_id=properties.correlation_id,
                     )
                 )
@@ -95,26 +95,7 @@ class Operator:
                 status=Status.DONE,
                 num=num + 1,
             )
-            channel.basic_publish(
-                '',
-                routing_key=properties.reply_to,
-                body=answer.model_dump_json().encode('utf-8'),
-                properties=pika.BasicProperties(
-                    correlation_id=properties.correlation_id,
-                )
-            )
-            if method_frame.delivery_tag is not None:
-                channel.basic_ack(method_frame.delivery_tag)
-            return
-            # else:
-            #     logger.info('The operator return answer.')
-            #     answer = Answer(
-            #         request=json.loads(body),
-            #         result=result,
-            #         status=Status.DONE,
-            #         num=0,
-            #     )
-            #     reply_to = properties.reply_to
+            reply_to = properties.reply_to
         except Exception as error:  # pylint: disable=broad-exception-caught
             logger.error('Error in operator %s: %s', self.__class__.__name__, str(error))
 
@@ -131,24 +112,25 @@ class Operator:
                 num=0,
             )
 
-            channel.basic_publish(
-                '',
-                routing_key=reply_to,
-                body=answer.model_dump_json().encode('utf-8'),
-                properties=pika.BasicProperties(
-                    correlation_id=properties.correlation_id,
-                )
+        channel.basic_publish(
+            '',
+            routing_key=reply_to,
+            body=answer.model_dump_json().encode('utf-8'),
+            properties=BasicProperties(
+                correlation_id=properties.correlation_id,
             )
-            if method_frame.delivery_tag is not None:
-                channel.basic_ack(method_frame.delivery_tag)
-            logger.info(
-                'End operator %s with body %s, body %s, reply_to %s, correlation_id %s',
-                self.__class__.__name__,
-                body,
-                str(answer),
-                reply_to,
-                properties.correlation_id
-            )
+        )
+        if method_frame.delivery_tag is not None:
+            channel.basic_ack(method_frame.delivery_tag)
+
+        logger.info(
+            'End operator %s with body %s, body %s, reply_to %s, correlation_id %s',
+            self.__class__.__name__,
+            body,
+            str(answer),
+            reply_to,
+            properties.correlation_id
+        )
 
     @classmethod
     def call(cls, **kwargs: Any) -> Any:

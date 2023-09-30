@@ -64,10 +64,13 @@ def test_sum(channel, reply_queue):
     )
 
     t = time.time()
+    bodies = []
     while t - time.time() < 5:
         method_frame, header_frame, body = channel.basic_get('reply_queue', auto_ack=True)
+        if body is not None:
+            bodies.append(body)
 
-        if body is None:
+        if len(bodies) < 2:
             time.sleep(0.1)
             continue
         else:
@@ -75,13 +78,21 @@ def test_sum(channel, reply_queue):
     else:
         raise Exception('Timeout.')
 
-    data = json.loads(body)
+    datas = [json.loads(body) for body in bodies]
 
-    assert data['result'] == {'c': 1100}
-    assert data['error'] is None
-    assert data['request'] == {'a': 100, 'b': 1000}
-    assert data['status'] == 'DONE'
     assert header_frame.correlation_id == correlation_id
+
+    for data in datas:
+        if data['status'] == 'PROCESSING':
+            assert data['result'] == {'c': 1100}
+            assert data['error'] is None
+            assert data['request'] == {'a': 100, 'b': 1000}
+        elif data['status'] == 'DONE':
+            assert data['result'] is None
+            assert data['error'] is None
+            assert data['request'] == {'a': 100, 'b': 1000}
+        else:
+            raise Exception()
 
 
 def test_sum_error(channel, reply_queue):
@@ -162,3 +173,138 @@ def test_sequence(channel, reply_queue):
 
     if set_:
         raise ValueError(set_)
+
+
+def test_info(channel, reply_queue):
+    correlation_id = uuid4().hex
+
+    channel.basic_publish(
+        '',
+        '__info__',
+        b'',
+        properties=pika.BasicProperties(
+            reply_to='reply_queue',
+            correlation_id=correlation_id
+        )
+    )
+
+    t = time.time()
+
+    while time.time() - t < 5:
+        method_frame, header_frame, body = channel.basic_get('reply_queue', auto_ack=True)
+
+        if body is None:
+            time.sleep(0.1)
+            continue
+
+        break
+    else:
+        raise Exception('Timeout.')
+
+    assert header_frame.correlation_id == correlation_id
+
+    data = json.loads(body)
+    assert data == [
+        {
+            'input': {
+                'properties': {
+                    'a': {
+                        'title': 'A',
+                        'type': 'integer'
+                    },
+                    'b': {
+                        'title': 'B',
+                        'type': 'integer'
+                    }
+                },
+                'required': [
+                    'a',
+                    'b'
+                ],
+                'title': 'Input',
+                'type': 'object'
+            },
+            'name': 'Sum',
+            'output': {
+                'properties': {
+                    'c': {
+                        'title': 'C',
+                        'type': 'integer'
+                    }
+                },
+                'required': [
+                    'c'
+                ],
+                'title': 'Output',
+                'type': 'object'
+            }
+        },
+        {
+            'input': {
+                'properties': {
+                    'a': {
+                        'title': 'A',
+                        'type': 'integer'
+                    },
+                    'b': {
+                        'title': 'B',
+                        'type': 'integer'
+                    }
+                },
+                'required': [
+                    'a',
+                    'b'
+                ],
+                'title': 'Input',
+                'type': 'object'
+            },
+            'name': 'Mul',
+            'output': {
+                'properties': {
+                    'c': {
+                        'title': 'C',
+                        'type': 'integer'
+                    }
+                },
+                'required': [
+                    'c'
+                ],
+                'title': 'Output',
+                'type': 'object'
+            }
+        },
+        {
+            'input': {
+                'properties': {
+                    'a': {
+                        'title': 'A',
+                        'type': 'integer'
+                    },
+                    'b': {
+                        'title': 'B',
+                        'type': 'integer'
+                    }
+                },
+                'required': [
+                    'a',
+                    'b'
+                ],
+                'title': 'Input',
+                'type': 'object'
+            },
+            'name': 'Sequence',
+            'output': {
+                'properties': {
+                    'c': {
+                        'title': 'C',
+                        'type': 'integer'
+                    }
+                },
+                'required': [
+                    'c'
+                ],
+                'title': 'Output',
+                'type': 'object'
+            }
+        }
+    ]
