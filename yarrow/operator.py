@@ -81,10 +81,15 @@ class Operator:
 
                 channel.basic_publish(
                     '',
-                    routing_key=properties.reply_to,
+                    routing_key=properties.reply_to.split('>', 1)[0],
                     body=answer.model_dump_json().encode('utf-8'),
                     properties=BasicProperties(
                         correlation_id=properties.correlation_id,
+                        reply_to=(
+                            properties.reply_to.split('>', 1)[1]
+                            if '>' in properties.reply_to
+                            else None
+                        )
                     )
                 )
 
@@ -114,10 +119,15 @@ class Operator:
 
         channel.basic_publish(
             '',
-            routing_key=reply_to,
+            routing_key=reply_to.split('>', 1)[0],
             body=answer.model_dump_json().encode('utf-8'),
             properties=BasicProperties(
                 correlation_id=properties.correlation_id,
+                reply_to=(
+                    reply_to.split('>', 1)[1]
+                    if '>' in reply_to
+                    else None
+                )
             )
         )
         if method_frame.delivery_tag is not None:
